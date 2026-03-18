@@ -1,5 +1,54 @@
 import { supabase } from '../lib/supabaseClient'
 
+export function buildExpenseSplits({ expense_id, total_amount, paid_by, participants = [], status = 'pending' }){
+  if(!paid_by) throw new Error('Select who paid this expense.')
+
+  const normalizedParticipants = Array.from(new Set((participants || []).filter(Boolean)))
+  if(normalizedParticipants.length === 0) throw new Error('Select at least one participant for this expense.')
+
+  const totalCents = Math.round(Number(total_amount || 0) * 100)
+  if(Number.isNaN(totalCents) || totalCents <= 0) throw new Error('Expense amount must be greater than 0.')
+
+  const baseShare = Math.floor(totalCents / normalizedParticipants.length)
+  const remainder = totalCents % normalizedParticipants.length
+
+  const shareByUserId = new Map()
+  normalizedParticipants.forEach((userId, index) => {
+    const shareCents = baseShare + (index < remainder ? 1 : 0)
+    shareByUserId.set(userId, shareCents)
+  })
+
+  return normalizedParticipants
+    .map(userId => ({
+      expense_id,
+      user_id: userId,
+      owed_to: paid_by,
+      amount: Number((shareByUserId.get(userId) / 100).toFixed(2)),
+      status
+    }))
+}
+
+export async function getProfileById(userId){
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single()
+  if(error) throw error
+  return data
+}
+
+export async function updateProfile(userId, fields = {}){
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(fields)
+    .eq('id', userId)
+    .select()
+    .single()
+  if(error) throw error
+  return data
+}
+
 // Activities
 export async function createActivity({ name, description, created_by }){
   const { data, error } = await supabase
@@ -32,6 +81,14 @@ export async function addActivityMember(activity_id, user_id){
 
 // Expenses + splitting logic
 export async function createExpense({ activity_id, title, total_amount, paid_by, created_by, participants }){
+  // Validate split input before creating the expense row.
+  buildExpenseSplits({
+    expense_id: '__preview__',
+    total_amount,
+    paid_by,
+    participants
+  })
+
   // insert expense
   const { data: expense, error: expErr } = await supabase
     .from('expenses')
@@ -40,28 +97,20 @@ export async function createExpense({ activity_id, title, total_amount, paid_by,
     .single()
   if(expErr) throw expErr
 
-  // split equally among participants EXCLUDING payer
-  const otherParticipants = participants.filter(p => p !== paid_by)
-  const splits = []
-  if(otherParticipants.length > 0){
-    // equal split with rounding to 2 decimals, adjust last
-    const raw = Number(total_amount) / participants.length
-    const share = Math.floor(raw * 100) / 100 // truncate
-    let accumulated = 0
-    for(let i=0;i<otherParticipants.length;i++){
-      const isLast = i === otherParticipants.length - 1
-      let amount = isLast ? Number((total_amount - (accumulated)).toFixed(2)) : share
-      accumulated += amount
-      splits.push({ expense_id: expense.id, user_id: otherParticipants[i], owed_to: paid_by, amount, status: 'pending' })
-    }
+  const splits = buildExpenseSplits({
+    expense_id: expense.id,
+    total_amount,
+    paid_by,
+    participants
+  })
 
-    const { error: splitErr } = await supabase
-      .from('expense_splits')
-      .insert(splits)
-    if(splitErr) throw splitErr
+  // reuse insert helper so insert logic/policies are consistent with edits
+  if(splits.length > 0){
+    const insertedSplits = await insertExpenseSplits(splits)
+    return { expense, splits: insertedSplits }
   }
 
-  return expense
+  return { expense, splits: [] }
 }
 
 export async function getActivityExpenses(activity_id){
@@ -81,6 +130,28 @@ export async function getActivityExpenses(activity_id){
     .eq('activity_id', activity_id)
     .order('created_at', { ascending: false })
   if(error) throw error
+  // Reconcile against recorded payments: if a payment exists that matches
+  // a split (same payer, payee and amount), mark that split as paid so the
+  // UI (which checks `s.status === 'paid'`) hides the Paid button on reload.
+  try{
+    const { data: payments, error: payErr } = await supabase
+      .from('payments')
+      .select('paid_by, paid_to, amount')
+      .eq('activity_id', activity_id)
+
+    if(!payErr && payments && payments.length > 0){
+      data.forEach(exp => {
+        (exp.expense_splits || []).forEach(s => {
+          if(s.status === 'paid') return
+          const owedToId = s.owed_to && (s.owed_to.id || s.owed_to)
+          const userId = s.user_id
+          const match = payments.find(p => p.paid_by === userId && p.paid_to === owedToId && Number(p.amount) === Number(s.amount))
+          if(match) s.status = 'paid'
+        })
+      })
+    }
+  }catch(_){ /* non-fatal: ignore payment reconciliation errors */ }
+
   return data
 }
 
@@ -102,6 +173,23 @@ export async function deleteExpenseSplitsByExpense(expense_id){
     .eq('expense_id', expense_id)
   if(error) throw error
   return data
+}
+
+export async function deleteExpense(expense_id){
+  // Prefer calling a SECURITY DEFINER RPC that deletes expense + splits
+  try{
+    const { data, error } = await supabase.rpc('delete_expense_and_splits', { eid: expense_id })
+    if(error) throw error
+    return data
+  }catch(e){
+    // Fallback to direct delete (may fail under RLS)
+    const { data, error } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('id', expense_id)
+    if(error) throw error
+    return data
+  }
 }
 
 export async function insertExpenseSplits(splits = []){
@@ -170,8 +258,32 @@ export async function getDashboardTotals(user_id){
     .eq('status', 'pending')
   if(oweErr) throw oweErr
 
+  // Also reconcile recorded payments so dashboard reflects transactions even
+  // if splits weren't updated in the DB for some reason. Payments reduce the
+  // outstanding totals for the payer/receiver.
+  const { data: payments, error: payErr } = await supabase
+    .from('payments')
+    .select('paid_by, paid_to, amount')
+    .or(`paid_by.eq.${user_id},paid_to.eq.${user_id}`)
+  if(payErr) {
+    // non-fatal: ignore payment reconciliation errors and return based on splits
+    const sum = arr => arr.reduce((s, r) => s + Number(r.amount || 0), 0)
+    return { you_are_owed: sum(owedData), you_owe: sum(oweData) }
+  }
+
   const sum = arr => arr.reduce((s, r) => s + Number(r.amount || 0), 0)
-  return { you_are_owed: sum(owedData), you_owe: sum(oweData) }
+  const pendingYouAreOwed = sum(owedData)
+  const pendingYouOwe = sum(oweData)
+
+  // Sum of payments received by user and payments made by user
+  const paymentsReceived = payments.filter(p => p.paid_to === user_id).reduce((s, p) => s + Number(p.amount || 0), 0)
+  const paymentsMade = payments.filter(p => p.paid_by === user_id).reduce((s, p) => s + Number(p.amount || 0), 0)
+
+  // Adjust pending totals by payments; ensure we don't go negative
+  const you_are_owed = Math.max(0, pendingYouAreOwed - paymentsReceived)
+  const you_owe = Math.max(0, pendingYouOwe - paymentsMade)
+
+  return { you_are_owed, you_owe }
 }
 
 // Record a payment: mark split paid and insert audit record

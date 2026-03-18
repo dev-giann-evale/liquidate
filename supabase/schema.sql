@@ -206,3 +206,12 @@ create index if not exists expense_splits_owed_to_idx on expense_splits(owed_to)
 -- client-side sessions. Configure the JWT/session lifetime in
 -- `supabase/config.toml` (see `auth.jwt_expiry = 3600` for 1-hour expiry).
 
+-- Helper to delete an expense and its splits as a security definer function
+create or replace function public.delete_expense_and_splits(eid uuid)
+returns void language plpgsql security definer as $$
+begin
+  delete from expense_splits where expense_id = eid;
+  delete from expenses where id = eid;
+end;
+$$;
+

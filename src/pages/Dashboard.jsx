@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Card from '../components/Card'
 import { useAuthStore } from '../stores/useAuthStore'
 import { getDashboardTotals, getMyExpenseSplits, getPayments, getProfilesByIds } from '../services/api'
@@ -11,6 +12,7 @@ export default function Dashboard(){
   const [myExpenses, setMyExpenses] = useState([])
   const [myPayments, setMyPayments] = useState([])
   const [listsLoading, setListsLoading] = useState(true)
+  const navigate = useNavigate()
 
   useEffect(()=>{
     if(!user) return
@@ -73,7 +75,10 @@ export default function Dashboard(){
         <Card>
           <div className="flex items-center justify-between">
             <h3 className="text-sm text-gray-300">My expenses</h3>
-            <div className="text-xs text-gray-500">Most recent</div>
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-gray-500">Most recent</div>
+              <button className="text-xs text-gray-300 underline" onClick={()=>navigate('/my-expenses')}>View all</button>
+            </div>
           </div>
           <div className="mt-3 space-y-2">
             {listsLoading ? <div className="text-sm text-gray-500">Loading...</div> : (

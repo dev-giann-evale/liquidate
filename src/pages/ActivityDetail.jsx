@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { getActivityExpenses, getActivityById, getActivityMembers, getAllProfiles, addActivityMember, removeActivityMember, updateActivity, updateExpense, deleteExpenseSplitsByExpense, insertExpenseSplits } from '../services/api'
+import { getActivityExpenses, getActivityById, getActivityMembers, getAllProfiles, addActivityMember, removeActivityMember, updateActivity, updateExpense, deleteExpenseSplitsByExpense, insertExpenseSplits, buildExpenseSplits, deleteExpense, recordPayment } from '../services/api'
 import Card from '../components/Card'
 import Loading from '../components/Loading'
 import ExpenseForm from '../components/ExpenseForm'
+import { useAuthStore } from '../stores/useAuthStore'
 
 export default function ActivityDetail(){
   const { id } = useParams()
@@ -24,6 +25,26 @@ export default function ActivityDetail(){
   const [editExpenseAmount, setEditExpenseAmount] = useState('')
   const [editExpensePaidBy, setEditExpensePaidBy] = useState(null)
   const [editExpenseParticipants, setEditExpenseParticipants] = useState([])
+  const currentUser = useAuthStore(state => state.user)
+
+  async function handleMarkPaid(split){
+    if(!confirm(`Mark this split as paid? ${split.user?.first_name || split.user_id} → ${split.owed_to?.first_name || split.owed_to} $${Number(split.amount).toFixed(2)}`)) return
+    try{
+      await recordPayment({
+        activity_id: id,
+        split_id: split.id,
+        paid_by: currentUser?.id,
+        // paid_to should be the user who owed the amount (the debtor)
+        paid_to: split.user_id,
+        amount: Number(split.amount),
+        payment_date: new Date().toISOString()
+      })
+      refresh()
+    }catch(e){
+      console.error('failed to record payment', e)
+      alert(e.message || 'Could not record payment')
+    }
+  }
 
   async function refresh(){
     if(!id) return
@@ -52,6 +73,26 @@ export default function ActivityDetail(){
       const d = new Date(dt)
       return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
     }catch(e){ return dt }
+  }
+
+  const getMemberName = (userId) => {
+    const match = members.find(m => m.id === userId)
+    if(!match) return userId
+    return `${match.first_name || ''} ${match.last_name || ''}`.trim()
+  }
+
+  let editSplitPreview = []
+  if(showEditExpenseModal && editingExpense){
+    try{
+      editSplitPreview = buildExpenseSplits({
+        expense_id: editingExpense.id,
+        total_amount: Number(editExpenseAmount || 0),
+        paid_by: editExpensePaidBy,
+        participants: editExpenseParticipants
+      })
+    }catch(_){
+      editSplitPreview = []
+    }
   }
 
   return (
@@ -195,15 +236,30 @@ export default function ActivityDetail(){
                   setAllUsers(allUsers.length ? allUsers : [])
                   setShowEditExpenseModal(true)
                 }}>Edit</button>
+                <button className="btn" onClick={async ()=>{
+                  if(!confirm('Delete this expense? This will remove associated splits.')) return
+                  try{
+                    await deleteExpense(exp.id)
+                    refresh()
+                  }catch(err){
+                    console.error('failed to delete expense', err)
+                    alert(err.message || 'Could not delete expense')
+                  }
+                }}>Delete</button>
               </div>
             </div>
             <div className="mt-2">
               <div className="text-sm text-gray-300">Splits:</div>
               <ul className="mt-1">
                 {exp.expense_splits?.map(s => (
-                  <li key={s.id} className="text-sm">
-                    {s.user?.first_name ? `${s.user.first_name} ${s.user.last_name || ''}` : s.user_id} owes ${Number(s.amount).toFixed(2)} — {s.status}
-                    {s.owed_to ? ` (to ${s.owed_to?.first_name ? `${s.owed_to.first_name} ${s.owed_to.last_name || ''}` : s.owed_to})` : ''}
+                  <li key={s.id} className="text-sm flex items-center justify-between">
+                    <div>
+                      {s.user?.first_name ? `${s.user.first_name} ${s.user.last_name || ''}` : s.user_id} owes ${Number(s.amount).toFixed(2)} — {s.status}
+                      {s.owed_to ? ` (to ${s.owed_to?.first_name ? `${s.owed_to.first_name} ${s.owed_to.last_name || ''}` : s.owed_to})` : ''}
+                    </div>
+                    {s.status !== 'paid' && currentUser && ((exp.paid_by && exp.paid_by.id) || exp.paid_by) === currentUser.id && (
+                      <button className="btn btn-secondary" onClick={()=>handleMarkPaid(s)}>Paid</button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -244,33 +300,54 @@ export default function ActivityDetail(){
                 ))}
               </div>
             </div>
+            <div className="mb-4">
+              <div className="text-sm text-gray-600 mb-2">Splits per person</div>
+              {editSplitPreview.length === 0 ? (
+                <div className="text-sm text-gray-500">No splits to show. Select participants and a valid amount.</div>
+              ) : (
+                <ul className="space-y-1">
+                  {editSplitPreview.map((split, index) => (
+                    <li key={`${split.user_id}-${index}`} className="text-sm text-gray-700">
+                      {getMemberName(split.user_id)} owes ${Number(split.amount).toFixed(2)} to {getMemberName(split.owed_to)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <div className="flex justify-end gap-2">
               <button className="btn btn-secondary" onClick={()=>setShowEditExpenseModal(false)}>Cancel</button>
               <button className="btn" onClick={async ()=>{
                 // persist changes: update expense, replace splits
                 const eid = editingExpense.id
+                let splits = []
+                try{
+                  splits = buildExpenseSplits({
+                    expense_id: eid,
+                    total_amount: Number(editExpenseAmount),
+                    paid_by: editExpensePaidBy,
+                    participants: editExpenseParticipants
+                  })
+                }catch(e){
+                  alert(e.message || 'Please fix split inputs before saving.')
+                  return
+                }
                 try{
                   await updateExpense(eid, { title: editExpenseTitle, total_amount: Number(editExpenseAmount), paid_by: editExpensePaidBy })
-                }catch(e){ console.error('failed to update expense', e) }
+                }catch(e){
+                  console.error('failed to update expense', e)
+                  alert(e.message || 'Could not update expense.')
+                  return
+                }
                 try{
                   await deleteExpenseSplitsByExpense(eid)
-                  // recreate splits: compute participants array and create splits similar to createExpense (exclude payer when creating splits)
-                  const participants = editExpenseParticipants
-                  const otherParticipants = participants.filter(p => p !== editExpensePaidBy)
-                  const splits = []
-                  if(otherParticipants.length > 0){
-                    const raw = Number(editExpenseAmount) / participants.length
-                    const share = Math.floor(raw * 100) / 100
-                    let accumulated = 0
-                    for(let i=0;i<otherParticipants.length;i++){
-                      const isLast = i === otherParticipants.length - 1
-                      let amount = isLast ? Number((editExpenseAmount - (accumulated)).toFixed(2)) : share
-                      accumulated += amount
-                      splits.push({ expense_id: eid, user_id: otherParticipants[i], owed_to: editExpensePaidBy, amount, status: 'pending' })
-                    }
+                  if(splits.length > 0){
                     await insertExpenseSplits(splits)
                   }
-                }catch(e){ console.error('failed to replace splits', e) }
+                }catch(e){
+                  console.error('failed to replace splits', e)
+                  alert(e.message || 'Could not save expense splits.')
+                  return
+                }
                 setShowEditExpenseModal(false)
                 refresh()
               }}>Save</button>

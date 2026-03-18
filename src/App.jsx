@@ -12,6 +12,7 @@ import MyExpenses from './pages/MyExpenses'
 import Profile from './pages/Profile'
 import { useAuthStore } from './stores/useAuthStore'
 import { supabase } from './lib/supabaseClient'
+import { getProfileById } from './services/api'
 
 function PrivateRoute({ children }){
   const user = useAuthStore(state => state.user)
@@ -29,12 +30,25 @@ export default function App(){
   // supabase client will include the user's access token on requests.
   useEffect(()=>{
     let mounted = true;
+
+    async function hydrateUser(sessionUser){
+      try{
+        const profile = await getProfileById(sessionUser.id)
+        if(!mounted) return
+        setUser({ ...sessionUser, profile })
+      }catch(error){
+        console.error('failed to load profile', error)
+        if(!mounted) return
+        setUser({ ...sessionUser })
+      }
+    }
+
     (async ()=>{
       try{
         const { data } = await supabase.auth.getSession()
         if(!mounted) return
         if(data?.session?.user){
-          setUser({ ...data.session.user })
+          await hydrateUser(data.session.user)
         } else {
           // mark auth as checked even when no session exists
           useAuthStore.getState().setAuthReady(true)
@@ -46,7 +60,7 @@ export default function App(){
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if(session?.user){
-        setUser({ ...session.user })
+        hydrateUser(session.user)
       }else{
         // clear user when signed out
         useAuthStore.getState().clear()

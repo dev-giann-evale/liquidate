@@ -16,9 +16,10 @@ export default function MyExpenses(){
     if(!user) return
     setLoading(true)
     getMyExpenseSplits(user.id).then(async d=>{
-      setSplits(d)
-      const owedToIds = Array.from(new Set(d.map(s => s.owed_to).filter(Boolean)))
-      const activityIds = Array.from(new Set(d.map(s => s.expenses?.activity_id).filter(Boolean)))
+      const sorted = (d || []).slice().sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+      setSplits(sorted)
+      const owedToIds = Array.from(new Set((sorted).map(s => s.owed_to).filter(Boolean)))
+      const activityIds = Array.from(new Set((sorted).map(s => s.expenses?.activity_id).filter(Boolean)))
       await Promise.all([getProfileMap(owedToIds), getActivityMap(activityIds)])
     }).catch(console.error).finally(()=>setLoading(false))
   },[user])

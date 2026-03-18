@@ -26,6 +26,10 @@ export default function ExpenseForm({ activityId, onCreated }){
 
   async function handleSubmit(e){
     e.preventDefault()
+    if(selected.length === 0){
+      alert('Select at least one member to split this expense with.')
+      return
+    }
     setLoading(true)
     try{
       const participants = selected
@@ -34,6 +38,7 @@ export default function ExpenseForm({ activityId, onCreated }){
       onCreated && onCreated()
     }catch(err){
       console.error(err)
+      alert(err.message || 'Could not create expense.')
     }finally{ setLoading(false) }
   }
 

@@ -6,6 +6,14 @@ import { getUserActivities, createActivity, addActivityMember, getActivityMember
 import { getProfileMap, getCachedProfile, getNameFromProfile } from '../lib/profileCache'
 import Modal from '../components/Modal'
 
+function formatActivityDate(dt){
+  if(!dt) return '—'
+  try{
+    const d = new Date(dt)
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  }catch(e){ return dt }
+}
+
 function NewActivityForm({ onCreated, onClose, currentUser }){
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -86,6 +94,7 @@ export default function Activities(){
             <div>
               <div className="font-semibold">{a.name}</div>
               <div className="text-sm text-gray-400">{a.description}</div>
+              <div className="text-xs text-gray-500">Activity date: {formatActivityDate(a.created_at)}</div>
               <div className="text-xs text-gray-500">Created by: {getNameFromProfile(getCachedProfile(a.created_by)) || a.created_by}</div>
                 <div className="text-xs text-gray-500">
                   Members: {membersInfo[a.id]?.count ?? '—'} {membersInfo[a.id]?.isMember ? <span className="ml-2 text-emerald-400">(you)</span> : null}
