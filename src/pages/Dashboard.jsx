@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Card from '../components/Card'
+import { formatCurrency } from '../lib/format'
 import { useAuthStore } from '../stores/useAuthStore'
 import { getDashboardTotals, getMyExpenseSplits, getPayments, getProfilesByIds } from '../services/api'
 import Loading from '../components/Loading'
@@ -60,15 +61,23 @@ export default function Dashboard(){
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <button
+          onClick={() => navigate('/activities')}
+          className="text-xl font-semibold btn"
+        >
+          Activities
+        </button>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card>
           <h3 className="text-sm text-gray-300">You are owed</h3>
-          <div className="text-3xl font-bold">${(totals.you_are_owed || 0).toFixed(2)}</div>
+          <div className="text-3xl font-bold">{formatCurrency(totals.you_are_owed || 0)}</div>
         </Card>
         <Card>
           <h3 className="text-sm text-gray-300">You owe</h3>
-          <div className="text-3xl font-bold">${(totals.you_owe || 0).toFixed(2)}</div>
+          <div className="text-3xl font-bold">{formatCurrency(totals.you_owe || 0)}</div>
         </Card>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -76,17 +85,22 @@ export default function Dashboard(){
           <div className="flex items-center justify-between">
             <h3 className="text-sm text-gray-300">My expenses</h3>
             <div className="flex items-center gap-3">
-              <div className="text-xs text-gray-500">Most recent</div>
-              <button className="text-xs text-gray-300 underline" onClick={()=>navigate('/my-expenses')}>View all</button>
+              <button
+                className="btn text-xs"
+                onClick={() => navigate('/my-expenses')}
+              >
+                View all
+              </button>
             </div>
           </div>
+          <div className="text-xs text-gray-500">Most recent</div>
           <div className="mt-3 space-y-2">
             {listsLoading ? <div className="text-sm text-gray-500">Loading...</div> : (
               myExpenses.length === 0 ? <div className="text-sm text-gray-500">No recent expenses</div> : (
                 myExpenses.slice(0,6).map(s => (
                   <div key={s.id} className="flex justify-between items-center">
                     <div className="text-sm">{s.expenses?.title || 'Expense'}</div>
-                    <div className="text-xs text-gray-400">${Number(s.amount || s.owed || 0).toFixed(2)} • {new Date(s.created_at).toLocaleDateString()}</div>
+                    <div className="text-xs text-gray-400">{formatCurrency(Number(s.amount || s.owed || 0))} • {new Date(s.created_at).toLocaleDateString()}</div>
                   </div>
                 ))
               )
@@ -96,15 +110,23 @@ export default function Dashboard(){
         <Card>
           <div className="flex items-center justify-between">
             <h3 className="text-sm text-gray-300">My payments</h3>
-            <div className="text-xs text-gray-500">Most recent</div>
+            <div className="flex items-center gap-3">
+              <button
+                className="btn text-xs"
+                onClick={() => navigate('/payments')}
+              >
+                View all
+              </button>
+            </div>
           </div>
+          <div className="text-xs text-gray-500">Most recent</div>
           <div className="mt-3 space-y-2">
             {listsLoading ? <div className="text-sm text-gray-500">Loading...</div> : (
               myPayments.length === 0 ? <div className="text-sm text-gray-500">No recent payments</div> : (
                 myPayments.slice(0,6).map(p => (
                   <div key={p.id} className="flex justify-between items-center">
                     <div className="text-sm">Paid to: {p.paid_to_profile ? `${p.paid_to_profile.first_name} ${p.paid_to_profile.last_name || ''}` : p.paid_to}</div>
-                    <div className="text-xs text-gray-400">${Number(p.amount || 0).toFixed(2)} • {new Date(p.payment_date || p.created_at).toLocaleDateString()}</div>
+                    <div className="text-xs text-gray-400">{formatCurrency(Number(p.amount || 0))} • {new Date(p.payment_date || p.created_at).toLocaleDateString()}</div>
                   </div>
                 ))
               )

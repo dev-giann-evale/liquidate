@@ -5,6 +5,7 @@ import Card from '../components/Card'
 import Loading from '../components/Loading'
 import ExpenseForm from '../components/ExpenseForm'
 import { useAuthStore } from '../stores/useAuthStore'
+import { formatCurrency } from '../lib/format'
 
 export default function ActivityDetail(){
   const { id } = useParams()
@@ -28,7 +29,7 @@ export default function ActivityDetail(){
   const currentUser = useAuthStore(state => state.user)
 
   async function handleMarkPaid(split){
-    if(!confirm(`Mark this split as paid? ${split.user?.first_name || split.user_id} → ${split.owed_to?.first_name || split.owed_to} $${Number(split.amount).toFixed(2)}`)) return
+    if(!confirm(`Mark this split as paid? ${split.user?.first_name || split.user_id} → ${split.owed_to?.first_name || split.owed_to} ${formatCurrency(split.amount)}`)) return
     try{
       await recordPayment({
         activity_id: id,
@@ -216,7 +217,7 @@ export default function ActivityDetail(){
             <div className="flex justify-between items-center">
               <div>
                 <div className="font-semibold">{exp.title}</div>
-                <div className="text-sm text-gray-400">Total: ${Number(exp.total_amount).toFixed(2)}</div>
+                <div className="text-sm text-gray-400">Total: {formatCurrency(exp.total_amount)}</div>
               </div>
               <div className="text-sm text-gray-300 flex items-center gap-3">
                 <div>Paid by: {exp.paid_by?.first_name ? `${exp.paid_by.first_name} ${exp.paid_by.last_name || ''}` : exp.paid_by}</div>
@@ -254,7 +255,7 @@ export default function ActivityDetail(){
                 {exp.expense_splits?.map(s => (
                   <li key={s.id} className="text-sm flex items-center justify-between">
                     <div>
-                      {s.user?.first_name ? `${s.user.first_name} ${s.user.last_name || ''}` : s.user_id} owes ${Number(s.amount).toFixed(2)} — {s.status}
+                      {s.user?.first_name ? `${s.user.first_name} ${s.user.last_name || ''}` : s.user_id} owes {formatCurrency(s.amount)} — {s.status}
                       {s.owed_to ? ` (to ${s.owed_to?.first_name ? `${s.owed_to.first_name} ${s.owed_to.last_name || ''}` : s.owed_to})` : ''}
                     </div>
                     {s.status !== 'paid' && currentUser && ((exp.paid_by && exp.paid_by.id) || exp.paid_by) === currentUser.id && (
@@ -302,13 +303,13 @@ export default function ActivityDetail(){
             </div>
             <div className="mb-4">
               <div className="text-sm text-gray-600 mb-2">Splits per person</div>
-              {editSplitPreview.length === 0 ? (
+                  {editSplitPreview.length === 0 ? (
                 <div className="text-sm text-gray-500">No splits to show. Select participants and a valid amount.</div>
               ) : (
                 <ul className="space-y-1">
                   {editSplitPreview.map((split, index) => (
                     <li key={`${split.user_id}-${index}`} className="text-sm text-gray-700">
-                      {getMemberName(split.user_id)} owes ${Number(split.amount).toFixed(2)} to {getMemberName(split.owed_to)}
+                      {getMemberName(split.user_id)} owes {formatCurrency(split.amount)} to {getMemberName(split.owed_to)}
                     </li>
                   ))}
                 </ul>

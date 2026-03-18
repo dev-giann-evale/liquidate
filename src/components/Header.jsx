@@ -52,15 +52,6 @@ export default function Header(){
                       <Link to="/profile" className="block px-4 py-2 hover:bg-gray-100" onClick={() => setOpen(false)}>Account Settings</Link>
                     </li>
                     <li>
-                      <Link to="/activities" className="block px-4 py-2 hover:bg-gray-100" onClick={() => setOpen(false)}>Activities</Link>
-                    </li>
-                    <li>
-                      <Link to="/add-expense" className="block px-4 py-2 hover:bg-gray-100" onClick={() => setOpen(false)}>Add Expense</Link>
-                    </li>
-                    <li>
-                      <Link to="/payments" className="block px-4 py-2 hover:bg-gray-100" onClick={() => setOpen(false)}>Payments</Link>
-                    </li>
-                    <li>
                       <button onClick={() => { setOpen(false); handleLogout() }} className="w-full text-left px-4 py-2 hover:bg-gray-100">Logout</button>
                     </li>
                   </>

@@ -83,16 +83,16 @@ export default function Activities(){
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-4">Activities</h1>
       <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-semibold">Activities</h1>
         <div />
-        <button className="btn" onClick={()=>setShowNew(true)}>+ New Activity</button>
+        <button className="btn font-semibold font-2xl" onClick={()=>setShowNew(true)}>+ New Activity</button>
       </div>
       <div className="space-y-3">
         {activities.map(a=> (
           <Card key={a.id} className="flex justify-between items-center">
             <div>
-              <div className="font-semibold">{a.name}</div>
+              <div className="font-semibold text-xl">{a.name}</div>
               <div className="text-sm text-gray-400">{a.description}</div>
               <div className="text-xs text-gray-500">Activity date: {formatActivityDate(a.created_at)}</div>
               <div className="text-xs text-gray-500">Created by: {getNameFromProfile(getCachedProfile(a.created_by)) || a.created_by}</div>
@@ -100,7 +100,7 @@ export default function Activities(){
                   Members: {membersInfo[a.id]?.count ?? '—'} {membersInfo[a.id]?.isMember ? <span className="ml-2 text-emerald-400">(you)</span> : null}
                 </div>
             </div>
-            <Link to={`/activity/${a.id}`} className="btn">Open</Link>
+            <Link to={`/activity/${a.id}`} className="btn">Details</Link>
           </Card>
         ))}
       </div>

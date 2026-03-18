@@ -1,4 +1,5 @@
-export function formatCurrency(amount, locale = 'en-US', currency = 'USD'){
+export function formatCurrency(amount){
   const num = Number(amount || 0)
-  return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 2 }).format(num)
+  const formatted = num.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return `Php ${formatted}`
 }

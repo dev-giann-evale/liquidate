@@ -15,9 +15,10 @@ export default function Payments(){
     if(!user) return
     setLoading(true)
     getPayments(user.id).then(async d=>{
-      setPayments(d)
+      const sorted = (d || []).slice().sort((a,b) => new Date(b.payment_date || b.created_at) - new Date(a.payment_date || a.created_at))
+      setPayments(sorted)
       // preload profile names
-      const ids = Array.from(new Set(d.flatMap(p => [p.paid_by, p.paid_to].filter(Boolean))))
+      const ids = Array.from(new Set(sorted.flatMap(p => [p.paid_by, p.paid_to].filter(Boolean))))
       await getProfileMap(ids)
     }).catch(console.error).finally(()=>setLoading(false))
   },[user])

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useAuthStore } from '../stores/useAuthStore'
-import { getMyExpenseSplits } from '../services/api'
+import { getMyExpenseSplits, getPayments } from '../services/api'
 import { getProfileMap, getNameFromProfile, getCachedProfile } from '../lib/profileCache'
 import { getActivityMap, getCachedActivity } from '../lib/activityCache'
 import { formatCurrency } from '../lib/format'
@@ -17,9 +17,26 @@ export default function MyExpenses(){
     setLoading(true)
     getMyExpenseSplits(user.id).then(async d=>{
       const sorted = (d || []).slice().sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
-      setSplits(sorted)
-      const owedToIds = Array.from(new Set((sorted).map(s => s.owed_to).filter(Boolean)))
-      const activityIds = Array.from(new Set((sorted).map(s => s.expenses?.activity_id).filter(Boolean)))
+      // fetch payments for reconciliation (payments where user is payer or payee)
+      let payments = []
+      try{
+        payments = await getPayments(user.id)
+      }catch(e){
+        console.error('Failed to load payments for reconciliation', e)
+      }
+
+      // mark splits as paid if a matching payment exists (payer, payee, amount)
+      const reconciled = (sorted || []).map(s => {
+        if(s.status === 'paid') return s
+        const owedToId = s.owed_to && (s.owed_to.id || s.owed_to)
+        const match = (payments || []).find(p => p.paid_by === s.user_id && p.paid_to === owedToId && Number(p.amount) === Number(s.amount))
+        if(match) return { ...s, status: 'paid' }
+        return s
+      })
+
+      setSplits(reconciled)
+      const owedToIds = Array.from(new Set((reconciled).map(s => s.owed_to).filter(Boolean)))
+      const activityIds = Array.from(new Set((reconciled).map(s => s.expenses?.activity_id).filter(Boolean)))
       await Promise.all([getProfileMap(owedToIds), getActivityMap(activityIds)])
     }).catch(console.error).finally(()=>setLoading(false))
   },[user])
