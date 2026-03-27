@@ -9,11 +9,11 @@ router.get('/', async (req, res) => {
     if(ids){
       const arr = ids.split(',')
       const placeholders = arr.map((_, i) => `$${i+1}`).join(',')
-      const sql = `select id, first_name, last_name, email from profiles where id in (${placeholders})`;
+      const sql = `select id, first_name, last_name, email from liquidate_profiles where id in (${placeholders})`;
       const { rows } = await db.query(sql, arr)
       return res.json(rows)
     }
-    const { rows } = await db.query('select id, first_name, last_name, email from profiles order by first_name')
+    const { rows } = await db.query('select id, first_name, last_name, email from liquidate_profiles order by first_name')
     res.json(rows)
   }catch(err){
     console.error('profiles error', err)

@@ -9,9 +9,9 @@ router.get('/', async (req, res) => {
   if(!userId) return res.status(400).json({ error: 'missing user_id' })
   try{
     const sql = `select p.*, pb.id as paid_by_id, pt.id as paid_to_id, pt.first_name as paid_to_first, pt.last_name as paid_to_last
-      from payments p
-      left join profiles pt on p.paid_to = pt.id
-      left join profiles pb on p.paid_by = pb.id
+      from liquidate_payments p
+      left join liquidate_profiles pt on p.paid_to = pt.id
+      left join liquidate_profiles pb on p.paid_by = pb.id
       where p.paid_by = $1 or p.paid_to = $1
       order by p.created_at desc`;
     const { rows } = await db.query(sql, [userId])
@@ -29,10 +29,10 @@ router.post('/', auth, async (req, res) => {
   const client = await db.pool.connect()
   try{
     await client.query('BEGIN')
-    const upd = 'update expense_splits set status = $1 where id = $2 returning *'
+  const upd = 'update liquidate_expense_splits set status = $1 where id = $2 returning *'
     await client.query(upd, ['paid', split_id])
-    const ins = 'insert into payments (activity_id, paid_by, paid_to, amount, payment_date) values ($1,$2,$3,$4,$5) returning *'
-    const { rows } = await client.query(ins, [activity_id, paid_by, paid_to, amount, payment_date || new Date()])
+  const ins = 'insert into liquidate_payments (activity_id, paid_by, paid_to, amount, payment_date) values ($1,$2,$3,$4,$5) returning *'
+  const { rows } = await client.query(ins, [activity_id, paid_by, paid_to, amount, payment_date || new Date()])
     await client.query('COMMIT')
     res.json(rows[0])
   }catch(err){

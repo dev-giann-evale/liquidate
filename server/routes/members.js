@@ -8,7 +8,7 @@ router.post('/', auth, async (req, res) => {
   const { activity_id, user_id } = req.body
   if(!activity_id || !user_id) return res.status(400).json({ error: 'missing activity_id or user_id' })
   try{
-    const sql = `insert into activity_members (activity_id, user_id) values ($1, $2) returning *`
+  const sql = `insert into liquidate_activity_members (activity_id, user_id) values ($1, $2) returning *`
     const { rows } = await db.query(sql, [activity_id, user_id])
     res.json(rows[0])
   }catch(err){
@@ -22,7 +22,7 @@ router.delete('/', auth, async (req, res) => {
   const { activity_id, user_id } = req.body
   if(!activity_id || !user_id) return res.status(400).json({ error: 'missing activity_id or user_id' })
   try{
-    const sql = `delete from activity_members where activity_id = $1 and user_id = $2 returning *`
+  const sql = `delete from liquidate_activity_members where activity_id = $1 and user_id = $2 returning *`
     const { rows } = await db.query(sql, [activity_id, user_id])
     res.json(rows[0] || null)
   }catch(err){

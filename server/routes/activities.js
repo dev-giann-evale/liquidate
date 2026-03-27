@@ -7,7 +7,7 @@ const auth = require('../middleware/auth')
 router.get('/:id', async (req, res) => {
   const id = req.params.id
   try{
-    const { rows } = await db.query('select * from activities where id = $1', [id])
+  const { rows } = await db.query('select * from liquidate_activities where id = $1', [id])
     if(rows.length === 0) return res.status(404).json({ error: 'not_found' })
     res.json(rows[0])
   }catch(err){
@@ -23,12 +23,12 @@ router.get('/', async (req, res) => {
     if(ids){
       const arr = ids.split(',')
       const placeholders = arr.map((_, i) => `$${i+1}`).join(',')
-      const sql = `select id, name, description from activities where id in (${placeholders})`
+  const sql = `select id, name, description from liquidate_activities where id in (${placeholders})`
       const { rows } = await db.query(sql, arr)
       return res.json(rows)
     }
     // otherwise list recent activities (safe default)
-    const { rows } = await db.query('select id, name, description, created_at from activities order by created_at desc limit 50')
+  const { rows } = await db.query('select id, name, description, created_at from liquidate_activities order by created_at desc limit 50')
     res.json(rows)
   }catch(err){
     console.error('activities list error', err)
@@ -37,12 +37,11 @@ router.get('/', async (req, res) => {
 })
 
 // PUT /api/activities/:id - update activity (name, description)
-const auth = require('../middleware/auth')
 router.put('/:id', auth, async (req, res) => {
   const id = req.params.id
   const { name, description } = req.body
   try{
-    const sql = 'update activities set name = $1, description = $2, updated_at = now() where id = $3 returning *'
+    const sql = 'update liquidate_activities set name = $1, description = $2, updated_at = now() where id = $3 returning *'
     const { rows } = await db.query(sql, [name, description, id])
     res.json(rows[0] || null)
   }catch(err){
@@ -59,17 +58,17 @@ router.get('/:id/expenses', async (req, res) => {
       json_build_object('id', pb.id, 'first_name', pb.first_name, 'last_name', pb.last_name) as paid_by,
       json_build_object('id', pc.id, 'first_name', pc.first_name, 'last_name', pc.last_name) as created_by,
       (select coalesce(json_agg(row_to_json(es)), '[]'::json) from (
-        select s.id, s.expense_id, s.user, s.owed_to, s.amount,
-               u.id as user_id, u.first_name as user_first, u.last_name as user_last,
-               ot.id as owed_to_id, ot.first_name as owed_to_first, ot.last_name as owed_to_last
-        from expense_splits s
-        left join profiles u on s.user = u.id
-        left join profiles ot on s.owed_to = ot.id
+   select s.id, s.expense_id, s.user_id, s.owed_to, s.amount,
+     u.id as user_id, u.first_name as user_first, u.last_name as user_last,
+     ot.id as owed_to_id, ot.first_name as owed_to_first, ot.last_name as owed_to_last
+   from liquidate_expense_splits s
+   left join liquidate_profiles u on s.user_id = u.id
+   left join liquidate_profiles ot on s.owed_to = ot.id
         where s.expense_id = e.id
       ) es) as expense_splits
-      from expenses e
-      left join profiles pb on e.paid_by = pb.id
-      left join profiles pc on e.created_by = pc.id
+      from liquidate_expenses e
+      left join liquidate_profiles pb on e.paid_by = pb.id
+      left join liquidate_profiles pc on e.created_by = pc.id
       where e.activity_id = $1
       order by e.created_at desc`;
     const { rows } = await db.query(sql, [id])
@@ -84,7 +83,7 @@ router.get('/:id/expenses', async (req, res) => {
 router.get('/:id/members', async (req, res) => {
   const activityId = req.params.id
   try{
-    const sql = `select p.id, p.first_name, p.last_name, p.email from activity_members m join profiles p on m.user_id = p.id where m.activity_id = $1 order by p.first_name`;
+  const sql = `select p.id, p.first_name, p.last_name, p.email from liquidate_activity_members m join liquidate_profiles p on m.user_id = p.id where m.activity_id = $1 order by p.first_name`;
     const { rows } = await db.query(sql, [activityId])
     res.json(rows)
   }catch(err){

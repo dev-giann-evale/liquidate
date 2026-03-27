@@ -48,6 +48,11 @@ export default function Header(){
               <ul className="divide-y">
                 {user ? (
                   <>
+                    {user.role === 'super_admin' && (
+                      <li>
+                        <Link to="/users" className="block px-4 py-2 hover:bg-gray-100" onClick={() => setOpen(false)}>Users</Link>
+                      </li>
+                    )}
                     <li>
                       <Link to="/profile" className="block px-4 py-2 hover:bg-gray-100" onClick={() => setOpen(false)}>Account Settings</Link>
                     </li>

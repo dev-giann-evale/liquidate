@@ -10,6 +10,7 @@ import AddExpense from './pages/AddExpense'
 import Payments from './pages/Payments'
 import MyExpenses from './pages/MyExpenses'
 import Profile from './pages/Profile'
+import Users from './pages/Users'
 import { useAuthStore } from './stores/useAuthStore'
 import { getProfileById } from './services/api'
 
@@ -74,6 +75,7 @@ export default function App(){
           <Route path="/payments" element={<PrivateRoute><Payments /></PrivateRoute>} />
           <Route path="/my-expenses" element={<PrivateRoute><MyExpenses /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+          <Route path="/users" element={<PrivateRoute><Users /></PrivateRoute>} />
         </Routes>
       </main>
     </div>

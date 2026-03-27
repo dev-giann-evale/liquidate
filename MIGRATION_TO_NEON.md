@@ -82,4 +82,24 @@ If you'd like, I can now:
 - Start implementing more server endpoints (create/update expense, member management), or
 - Update the frontend to call server endpoints for more read APIs.
 
+Recent note (table renaming)
+---------------------------------
+As part of the Neon migration, all database tables in `db/schema_neon.sql` were
+prefixed with `liquidate_` (for example `profiles` -> `liquidate_profiles`).
+This reduces the chance of accidental name collisions and makes it explicit
+which objects belong to the Liquidate schema.
+
+The provided `db/schema_neon.sql` also creates optional compatibility views that
+expose the original, unprefixed table names (`profiles`, `users`, `activities`,
+`activity_members`, `expenses`, `expense_splits`, `payments`). You can keep
+these views while you update scripts or tooling that reference the old names,
+then drop them when you're ready. The views do not bypass RLS policies on the
+underlying tables.
+
+Example: to drop the compatibility views later:
+
+```sql
+drop view if exists profiles, users, activities, activity_members, expenses, expense_splits, payments;
+```
+
 Choose the next step and I'll execute it.

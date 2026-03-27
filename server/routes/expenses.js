@@ -20,7 +20,7 @@ router.post('/', auth, async (req, res) => {
   const client = await db.pool.connect()
   try{
     await client.query('BEGIN')
-    const insertExpense = 'insert into expenses (activity_id, title, amount, total_amount, paid_by, created_by) values ($1,$2,$3,$4,$5,$6) returning *'
+  const insertExpense = 'insert into liquidate_expenses (activity_id, title, amount, total_amount, paid_by, created_by) values ($1,$2,$3,$4,$5,$6) returning *'
     const { rows: expRows } = await client.query(insertExpense, [activity_id, title, total_amount, total_amount, paid_by, created_by])
     const expense = expRows[0]
 
@@ -33,7 +33,7 @@ router.post('/', auth, async (req, res) => {
 
     const valuesSql = splits.map((_, idx) => `($${idx*5+1},$${idx*5+2},$${idx*5+3},$${idx*5+4},$${idx*5+5})`).join(',')
     const flat = splits.flat()
-    const insertSplitsSql = `insert into expense_splits (expense_id, "user", owed_to, amount, status) values ${valuesSql} returning *`
+  const insertSplitsSql = `insert into liquidate_expense_splits (expense_id, user_id, owed_to, amount, status) values ${valuesSql} returning *`
     const { rows: splitRows } = await client.query(insertSplitsSql, flat)
 
     await client.query('COMMIT')
@@ -62,20 +62,20 @@ router.put('/:id', auth, async (req, res) => {
     if(total_amount !== undefined){ updFields.push(`total_amount = $${idx++}`); vals.push(total_amount); updFields.push(`amount = $${idx++}`); vals.push(total_amount) }
     if(paid_by !== undefined){ updFields.push(`paid_by = $${idx++}`); vals.push(paid_by) }
     if(updFields.length > 0){
-      const sql = `update expenses set ${updFields.join(', ')}, updated_at = now() where id = $${idx} returning *`
+  const sql = `update liquidate_expenses set ${updFields.join(', ')}, updated_at = now() where id = $${idx} returning *`
       vals.push(expenseId)
       const { rows } = await client.query(sql, vals)
       // eslint-disable-next-line prefer-destructuring
       var expense = rows[0]
     }else{
-      const { rows } = await client.query('select * from expenses where id = $1', [expenseId])
+  const { rows } = await client.query('select * from liquidate_expenses where id = $1', [expenseId])
       var expense = rows[0]
     }
 
     let splitRows = []
     if(Array.isArray(participants)){
       // delete existing splits
-      await client.query('delete from expense_splits where expense_id = $1', [expenseId])
+  await client.query('delete from liquidate_expense_splits where expense_id = $1', [expenseId])
 
       const totalCents = Math.round(Number(total_amount || expense.total_amount) * 100)
       const normalized = Array.from(new Set(participants.filter(Boolean)))
@@ -92,12 +92,12 @@ router.put('/:id', auth, async (req, res) => {
       if(splits.length > 0){
         const valuesSql = splits.map((_, idx) => `($${idx*5+1},$${idx*5+2},$${idx*5+3},$${idx*5+4},$${idx*5+5})`).join(',')
         const flat = splits.flat()
-        const insertSplitsSql = `insert into expense_splits (expense_id, "user", owed_to, amount, status) values ${valuesSql} returning *`
+  const insertSplitsSql = `insert into liquidate_expense_splits (expense_id, user_id, owed_to, amount, status) values ${valuesSql} returning *`
         const resSplits = await client.query(insertSplitsSql, flat)
         splitRows = resSplits.rows
       }
     }else{
-      const { rows } = await client.query('select * from expense_splits where expense_id = $1', [expenseId])
+  const { rows } = await client.query('select * from liquidate_expense_splits where expense_id = $1', [expenseId])
       splitRows = rows
     }
 
@@ -118,8 +118,8 @@ router.delete('/:id', auth, async (req, res) => {
   const client = await db.pool.connect()
   try{
     await client.query('BEGIN')
-    await client.query('delete from expense_splits where expense_id = $1', [expenseId])
-    const { rows } = await client.query('delete from expenses where id = $1 returning *', [expenseId])
+  await client.query('delete from liquidate_expense_splits where expense_id = $1', [expenseId])
+  const { rows } = await client.query('delete from liquidate_expenses where id = $1 returning *', [expenseId])
     await client.query('COMMIT')
     res.json(rows[0] || null)
   }catch(err){
@@ -135,7 +135,7 @@ router.delete('/:id', auth, async (req, res) => {
 router.delete('/:id/splits', auth, async (req, res) => {
   const expenseId = req.params.id
   try{
-    const { rows } = await db.query('delete from expense_splits where expense_id = $1 returning *', [expenseId])
+  const { rows } = await db.query('delete from liquidate_expense_splits where expense_id = $1 returning *', [expenseId])
     res.json(rows || [])
   }catch(err){
     console.error('delete splits error', err)
@@ -156,7 +156,7 @@ router.post('/:id/splits', auth, async (req, res) => {
     return `($${idx+1},$${idx+2},$${idx+3},$${idx+4},$${idx+5})`
   }).join(',')
   if(values.length === 0) return res.json([])
-  const sql = `insert into expense_splits (expense_id, "user", owed_to, amount, status) values ${placeholders} returning *`
+  const sql = `insert into liquidate_expense_splits (expense_id, user_id, owed_to, amount, status) values ${placeholders} returning *`
   try{
     const { rows } = await db.query(sql, values)
     res.json(rows)

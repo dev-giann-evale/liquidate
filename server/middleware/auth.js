@@ -45,4 +45,29 @@ function authMiddleware(req, res, next){
   return next()
 }
 
+// Also export a helper for serverless handlers to parse auth from a request
+async function parseAuth(req){
+  const auth = req.headers?.authorization || req.headers?.Authorization
+  if(!auth) return null
+  const parts = auth.split(' ')
+  if(parts.length !== 2 || parts[0] !== 'Bearer') return null
+  const token = parts[1]
+  const secret = process.env.AUTH_JWT_SECRET
+  if(secret){
+    try{
+      const payload = jwt.verify(token, secret)
+      return payload
+    }catch(err){
+      throw new Error('invalid_token')
+    }
+  }
+  try{
+    const payload = jwt.decode(token)
+    return payload
+  }catch(_){
+    return null
+  }
+}
+
+authMiddleware.parseAuth = parseAuth
 module.exports = authMiddleware
