@@ -1,8 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
 import { useAuthStore } from '../stores/useAuthStore'
-
 export default function Login(){
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -13,17 +11,29 @@ export default function Login(){
   async function handleSubmit(e){
     e.preventDefault()
     setLoading(true)
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if(error){
-      alert(error.message)
+    try{
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+      if(!resp.ok){
+        const err = await resp.json()
+        alert(err.error || 'Login failed')
+        setLoading(false)
+        return
+      }
+      const { token, user } = await resp.json()
+      // store token and set user in store
+      localStorage.setItem('auth_token', token)
+      setUser(user)
       setLoading(false)
-      return
+      navigate('/dashboard')
+    }catch(err){
+      console.error('login error', err)
+      alert('Login failed')
+      setLoading(false)
     }
-    // fetch profile
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single()
-    setUser({ ...data.user, profile })
-    setLoading(false)
-    navigate('/dashboard')
   }
 
   return (

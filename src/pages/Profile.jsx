@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '../stores/useAuthStore'
 import { getProfileById, updateProfile } from '../services/api'
-import { supabase } from '../lib/supabaseClient'
 
 export default function Profile(){
   const user = useAuthStore(state=>state.user)
@@ -108,8 +107,14 @@ export default function Profile(){
     setUpdatingPassword(true)
 
     try{
-      const { error: passwordError } = await supabase.auth.updateUser({ password: newPassword })
-      if(passwordError) throw passwordError
+      // call server auth password update (requires authenticated user)
+      const token = localStorage.getItem('auth_token')
+      const resp = await fetch('/api/auth/update-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ password: newPassword })
+      })
+      if(!resp.ok) throw new Error('Could not update password')
       setNewPassword('')
       setConfirmPassword('')
       setPasswordMessage('Password updated successfully.')

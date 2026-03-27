@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import logo from '../assets/logo.png'
-import { supabase } from '../lib/supabaseClient'
 import { useAuthStore } from '../stores/useAuthStore'
 
 export default function Header(){
@@ -12,7 +11,8 @@ export default function Header(){
   const menuRef = useRef()
 
   async function handleLogout(){
-    await supabase.auth.signOut()
+    // remove stored token and clear local user state
+    try{ localStorage.removeItem('auth_token') }catch(_){ }
     setUser(null)
     navigate('/login')
   }
@@ -48,6 +48,11 @@ export default function Header(){
               <ul className="divide-y">
                 {user ? (
                   <>
+                    {user.role === 'super_admin' && (
+                      <li>
+                        <Link to="/users" className="block px-4 py-2 hover:bg-gray-100" onClick={() => setOpen(false)}>Users</Link>
+                      </li>
+                    )}
                     <li>
                       <Link to="/profile" className="block px-4 py-2 hover:bg-gray-100" onClick={() => setOpen(false)}>Account Settings</Link>
                     </li>
