@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import logo from '../assets/logo.png'
-import { supabase } from '../lib/supabaseClient'
 import { useAuthStore } from '../stores/useAuthStore'
 
 export default function Header(){
@@ -12,7 +11,8 @@ export default function Header(){
   const menuRef = useRef()
 
   async function handleLogout(){
-    await supabase.auth.signOut()
+    // remove stored token and clear local user state
+    try{ localStorage.removeItem('auth_token') }catch(_){ }
     setUser(null)
     navigate('/login')
   }

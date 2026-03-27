@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/useAuthStore'
 
@@ -15,21 +15,28 @@ export default function Register(){
   async function handleSubmit(e){
     e.preventDefault()
     setLoading(true)
-    const { data, error } = await supabase.auth.signUp({ email, password })
-    if(error){
-      alert(error.message)
+    try{
+      const resp = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName })
+      })
+      if(!resp.ok){
+        const err = await resp.json()
+        alert(err.error || 'Registration failed')
+        setLoading(false)
+        return
+      }
+      const { token, user } = await resp.json()
+      localStorage.setItem('auth_token', token)
+      setUser(user)
       setLoading(false)
-      return
+      navigate('/dashboard')
+    }catch(err){
+      console.error('register error', err)
+      alert('Registration failed')
+      setLoading(false)
     }
-
-    // insert into profiles table (use the returned user id if present). For Supabase, signUp may require email confirmation.
-    const userId = data.user?.id
-    if(userId){
-      await supabase.from('profiles').insert({ id: userId, first_name: firstName, last_name: lastName, email })
-    }
-    setUser({ ...data.user, profile: { first_name: firstName, last_name: lastName } })
-    setLoading(false)
-    navigate('/dashboard')
   }
 
   return (

@@ -1,12 +1,19 @@
--- Supabase SQL schema for Liquidate
--- Tables: profiles, activities, activity_members, expenses, expense_splits, payments
+-- Adapted schema for Neon/Postgres
+-- This is derived from `supabase/schema.sql` but replaces Supabase-specific
+-- `auth.uid()` and `auth.role()` calls with session settings that your
+-- application server must set before running queries:
+--   set_config('app.current_user_id', '<uuid>', true);
+--   set_config('app.current_user_role', '<role>', true);
+-- The server should set these per-connection or per-transaction to enable
+-- RLS-style policies in Neon.
 
--- Enable uuid-ossp (if needed in some Postgres setups)
+-- Supabase SQL schema for Liquidate (Neon-adapted)
+
+-- Enable uuid-ossp if needed
 -- create extension if not exists "uuid-ossp";
 
--- profiles: linked to auth.users
 create table if not exists profiles (
-  id uuid primary key references auth.users on delete cascade,
+  id uuid primary key,
   first_name text,
   last_name text,
   email text,
@@ -15,7 +22,14 @@ create table if not exists profiles (
 
 create index if not exists profiles_email_idx on profiles(email);
 
--- activities
+-- users table for authentication (password hash stored here)
+create table if not exists users (
+  id uuid default gen_random_uuid() primary key,
+  email text unique not null,
+  password_hash text not null,
+  created_at timestamptz default now()
+);
+
 create table if not exists activities (
   id uuid default gen_random_uuid() primary key,
   name text not null,
@@ -24,7 +38,6 @@ create table if not exists activities (
   created_at timestamptz default now()
 );
 
--- activity_members
 create table if not exists activity_members (
   id uuid default gen_random_uuid() primary key,
   activity_id uuid references activities(id) on delete cascade,
@@ -33,7 +46,6 @@ create table if not exists activity_members (
   unique(activity_id, user_id)
 );
 
--- expenses
 create table if not exists expenses (
   id uuid default gen_random_uuid() primary key,
   activity_id uuid references activities(id) on delete cascade,
@@ -44,7 +56,6 @@ create table if not exists expenses (
   created_at timestamptz default now()
 );
 
--- expense_splits
 create table if not exists expense_splits (
   id uuid default gen_random_uuid() primary key,
   expense_id uuid references expenses(id) on delete cascade,
@@ -55,7 +66,6 @@ create table if not exists expense_splits (
   created_at timestamptz default now()
 );
 
--- payments (audit trail)
 create table if not exists payments (
   id uuid default gen_random_uuid() primary key,
   activity_id uuid references activities(id) on delete cascade,
@@ -66,10 +76,7 @@ create table if not exists payments (
   created_at timestamptz default now()
 );
 
--- Example RLS policies (enable RLS per table as needed)
--- Grant read access to authenticated users and then lock down with policies
-
--- Enable RLS
+-- Enable RLS (optional) - policies below reference session settings
 alter table if exists profiles enable row level security;
 alter table if exists activities enable row level security;
 alter table if exists activity_members enable row level security;
@@ -77,13 +84,12 @@ alter table if exists expenses enable row level security;
 alter table if exists expense_splits enable row level security;
 alter table if exists payments enable row level security;
 
--- If this script is re-run, remove existing policies to avoid duplicates
+-- Drop existing policies (idempotent script run)
 drop policy if exists "profiles_select" on profiles;
 drop policy if exists "profiles_insert" on profiles;
 drop policy if exists "profiles_update" on profiles;
 drop policy if exists "profiles_delete" on profiles;
 
-drop policy if exists "activities_select_if_member" on activities;
 drop policy if exists "activities_select_if_member_or_owner" on activities;
 drop policy if exists "activities_insert_authenticated" on activities;
 drop policy if exists "activities_owner_update" on activities;
@@ -101,54 +107,52 @@ drop policy if exists "expense_splits_insert" on expense_splits;
 drop policy if exists "payments_select_participant" on payments;
 drop policy if exists "payments_insert" on payments;
 
-
--- Helper: check whether a user is a member of an activity.
--- Use SECURITY DEFINER so RLS does not apply when this function runs inside policies.
+-- Helper function: uses activity_members to check membership
 create or replace function public.is_activity_member(aid uuid, uid uuid)
-returns boolean language sql security definer stable as $$
+returns boolean language sql stable as $$
   select exists(select 1 from activity_members where activity_id = aid and user_id = uid);
 $$;
 
--- Profiles policies: allow only the owner to see/modify their profile
+-- Replace auth.uid() with session setting 'app.current_user_id'
+-- and auth.role() with 'app.current_user_role'. The application server
+-- must set these using set_config before executing queries when RLS is enabled.
+
 create policy "profiles_select" on profiles
-  for select using (auth.uid() = id);
+  for select using ((current_setting('app.current_user_id', true))::uuid = id);
 
 create policy "profiles_insert" on profiles
-  for insert with check (auth.uid() = id);
+  for insert with check ((current_setting('app.current_user_id', true))::uuid = id);
 
 create policy "profiles_update" on profiles
-  for update using (auth.uid() = id) with check (auth.uid() = id);
+  for update using ((current_setting('app.current_user_id', true))::uuid = id) with check ((current_setting('app.current_user_id', true))::uuid = id);
 
 create policy "profiles_delete" on profiles
-  for delete using (auth.uid() = id);
+  for delete using ((current_setting('app.current_user_id', true))::uuid = id);
 
--- Activities: allow select if user is a member or the activity creator; insert if authenticated; update/delete only if owner
 create policy "activities_select_if_member_or_owner" on activities
   for select using (
-    public.is_activity_member(activities.id, auth.uid()) OR created_by = auth.uid()
+    public.is_activity_member(activities.id, (current_setting('app.current_user_id', true))::uuid) OR created_by = (current_setting('app.current_user_id', true))::uuid
   );
 
--- Allow authenticated users to create activities. If the client doesn't supply
--- created_by we accept NULL here and a trigger will set created_by := auth.uid().
 create policy "activities_insert_authenticated" on activities
-  for insert with check (auth.role() = 'authenticated' AND (created_by = auth.uid() OR created_by IS NULL));
+  for insert with check ((current_setting('app.current_user_role', true)) = 'authenticated' AND (created_by = (current_setting('app.current_user_id', true))::uuid OR created_by IS NULL));
 
--- Only the activity creator (owner) can update the record. Require authenticated role explicitly.
 create policy "activities_owner_update" on activities
-  for update using (auth.role() = 'authenticated' AND created_by = auth.uid()) with check (auth.role() = 'authenticated' AND created_by = auth.uid());
+  for update using ((current_setting('app.current_user_role', true)) = 'authenticated' AND created_by = (current_setting('app.current_user_id', true))::uuid) with check ((current_setting('app.current_user_role', true)) = 'authenticated' AND created_by = (current_setting('app.current_user_id', true))::uuid);
 
--- Only the activity creator (owner) can delete the record. Require authenticated role explicitly.
 create policy "activities_owner_delete" on activities
-  for delete using (auth.role() = 'authenticated' AND created_by = auth.uid());
+  for delete using ((current_setting('app.current_user_role', true)) = 'authenticated' AND created_by = (current_setting('app.current_user_id', true))::uuid);
 
--- If the client does not pass `created_by`, set it automatically to the
--- authenticated user. This avoids RLS insert failures when the frontend omits
--- the field and is simpler than requiring every client to include it.
 create or replace function public.set_activity_created_by()
 returns trigger language plpgsql security definer as $$
 begin
   if new.created_by is null then
-    new.created_by := auth.uid();
+    begin
+      new.created_by := (current_setting('app.current_user_id', true))::uuid;
+    exception when others then
+      -- leave null if no session var available
+      new.created_by := null;
+    end;
   end if;
   return new;
 end;
@@ -159,54 +163,43 @@ create trigger trg_set_activity_created_by
 before insert on activities
 for each row execute function public.set_activity_created_by();
 
--- activity_members: allow users to insert themselves or allow activity creator to add members
 create policy "activity_members_insert" on activity_members
   for insert with check (
-    auth.role() = 'authenticated' AND (user_id = auth.uid() or exists (select 1 from activities a where a.id = activity_members.activity_id and a.created_by = auth.uid()))
+    (current_setting('app.current_user_role', true)) = 'authenticated' AND (user_id = (current_setting('app.current_user_id', true))::uuid or exists (select 1 from activities a where a.id = activity_members.activity_id and a.created_by = (current_setting('app.current_user_id', true))::uuid))
   );
 
 create policy "activity_members_select" on activity_members
   for select using (
-    user_id = auth.uid() or public.is_activity_member(activity_members.activity_id, auth.uid())
+    user_id = (current_setting('app.current_user_id', true))::uuid or public.is_activity_member(activity_members.activity_id, (current_setting('app.current_user_id', true))::uuid)
   );
 
--- expenses: allow members to insert and select expenses for activities they belong to
 create policy "expenses_members" on expenses
   for select using (
-    public.is_activity_member(expenses.activity_id, auth.uid())
+    public.is_activity_member(expenses.activity_id, (current_setting('app.current_user_id', true))::uuid)
   );
 
 create policy "expenses_insert" on expenses
-  for insert with check (auth.role() = 'authenticated');
+  for insert with check ((current_setting('app.current_user_role', true)) = 'authenticated');
 
--- expense_splits: only visible to the user involved or the owed_to (payer)
 create policy "expense_splits_select_involved" on expense_splits
   for select using (
-    user_id = auth.uid() or owed_to = auth.uid() or public.is_activity_member((select activity_id from expenses e where e.id = expense_splits.expense_id), auth.uid())
+    user_id = (current_setting('app.current_user_id', true))::uuid or owed_to = (current_setting('app.current_user_id', true))::uuid or public.is_activity_member((select activity_id from expenses e where e.id = expense_splits.expense_id), (current_setting('app.current_user_id', true))::uuid)
   );
 
 create policy "expense_splits_insert" on expense_splits
-  for insert with check (auth.role() = 'authenticated');
+  for insert with check ((current_setting('app.current_user_role', true)) = 'authenticated');
 
--- payments: allow select for participants, insert by authenticated
 create policy "payments_select_participant" on payments
   for select using (
-    public.is_activity_member(payments.activity_id, auth.uid())
+    public.is_activity_member(payments.activity_id, (current_setting('app.current_user_id', true))::uuid)
   );
 
 create policy "payments_insert" on payments
-  for insert with check (auth.role() = 'authenticated');
+  for insert with check ((current_setting('app.current_user_role', true)) = 'authenticated');
 
--- Indexes for common queries
 create index if not exists expense_splits_user_idx on expense_splits(user_id);
 create index if not exists expense_splits_owed_to_idx on expense_splits(owed_to);
 
--- Note: Client-side sessions are handled via Supabase Auth (JWTs). We
--- removed the DB-backed `sessions` table in favor of using Supabase Auth
--- client-side sessions. Configure the JWT/session lifetime in
--- `supabase/config.toml` (see `auth.jwt_expiry = 3600` for 1-hour expiry).
-
--- Helper to delete an expense and its splits as a security definer function
 create or replace function public.delete_expense_and_splits(eid uuid)
 returns void language plpgsql security definer as $$
 begin
@@ -215,3 +208,8 @@ begin
 end;
 $$;
 
+-- IMPORTANT: Your application server MUST set the session vars `app.current_user_id`
+-- and `app.current_user_role` before executing queries if you want RLS to
+-- enforce per-user policies. Example (psql/session):
+--   SELECT set_config('app.current_user_id', '3c9f...-uuid', true);
+--   SELECT set_config('app.current_user_role', 'authenticated', true);

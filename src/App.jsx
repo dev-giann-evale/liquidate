@@ -11,7 +11,6 @@ import Payments from './pages/Payments'
 import MyExpenses from './pages/MyExpenses'
 import Profile from './pages/Profile'
 import { useAuthStore } from './stores/useAuthStore'
-import { supabase } from './lib/supabaseClient'
 import { getProfileById } from './services/api'
 
 function PrivateRoute({ children }){
@@ -26,60 +25,38 @@ function PrivateRoute({ children }){
 export default function App(){
   const setUser = useAuthStore(state => state.setUser)
 
-  // Rehydrate session on app load and listen for auth changes so the
-  // supabase client will include the user's access token on requests.
+  // Rehydrate session on app load by reading stored token and asking the server
+  // for the current user. Server will validate the token and return the user
+  // record (including profile) when available.
   useEffect(()=>{
-    let mounted = true;
+    let mounted = true
 
-    async function hydrateUser(sessionUser){
+    async function hydrate(){
       try{
-        const profile = await getProfileById(sessionUser.id)
-        if(!mounted) return
-        setUser({ ...sessionUser, profile })
-      }catch(error){
-        console.error('failed to load profile', error)
-        if(!mounted) return
-        setUser({ ...sessionUser })
-      }
-    }
-
-    (async ()=>{
-      try{
-        const { data } = await supabase.auth.getSession()
-        if(!mounted) return
-        if(data?.session?.user){
-          await hydrateUser(data.session.user)
-        } else {
-          // mark auth as checked even when no session exists
+        const token = localStorage.getItem('auth_token')
+        if(!token){
           useAuthStore.getState().setAuthReady(true)
+          return
         }
-      }catch(e){
-        console.error('failed to get session', e)
-      }
-    })()
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if(session?.user){
-        hydrateUser(session.user)
-      }else{
-        // clear user when signed out
-        useAuthStore.getState().clear()
-      }
-    })
-
-    return ()=>{
-      mounted = false
-      // unsubscribe listener (support different supabase-js shapes)
-      try{
-        const maybeSub = listener?.subscription ?? listener
-        if(typeof maybeSub === 'function'){
-          // listener is an unsubscribe function
-          maybeSub()
-        }else if(maybeSub && typeof maybeSub.unsubscribe === 'function'){
-          maybeSub.unsubscribe()
+        const resp = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } })
+        if(!resp.ok){
+          useAuthStore.getState().setAuthReady(true)
+          return
         }
-      }catch(_){ }
+        const payload = await resp.json()
+        if(!mounted) return
+        // payload should include a `user` object similar to login
+        setUser(payload.user)
+      }catch(err){
+        console.error('failed to rehydrate session', err)
+      }finally{
+        if(mounted) useAuthStore.getState().setAuthReady(true)
+      }
     }
+
+    hydrate()
+
+    return ()=>{ mounted = false }
   }, [setUser])
 
   return (
