@@ -40,12 +40,12 @@ async function handleJsonResponse(resp){
 }
 
 export async function getProfileById(userId){
-  const resp = await fetch(`/api/profiles/${encodeURIComponent(userId)}`)
+  const resp = await fetch(`/api/profiles?id=${encodeURIComponent(userId)}`)
   return handleJsonResponse(resp)
 }
 
 export async function updateProfile(userId, fields = {}){
-  const resp = await fetch(`/api/profiles/${encodeURIComponent(userId)}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(fields) })
+  const resp = await fetch(`/api/profiles?id=${encodeURIComponent(userId)}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(fields) })
   return handleJsonResponse(resp)
 }
 
@@ -56,7 +56,7 @@ export async function createActivity({ name, description, created_by }){
 }
 
 export async function getUserActivities(userId){
-  const resp = await fetch(`/api/users/${encodeURIComponent(userId)}/activities`)
+  const resp = await fetch(`/api/users/activities?id=${encodeURIComponent(userId)}`)
   return handleJsonResponse(resp)
 }
 
@@ -78,12 +78,12 @@ export async function createExpense({ activity_id, title, total_amount, paid_by,
 }
 
 export async function getActivityExpenses(activity_id){
-  const resp = await fetch(`/api/activities/${encodeURIComponent(activity_id)}/expenses`)
+  const resp = await fetch(`/api/activities/expenses?id=${encodeURIComponent(activity_id)}`)
   return handleJsonResponse(resp)
 }
 
 export async function updateExpense(expense_id, fields = {}){
-  const resp = await fetch(`/api/expenses/${encodeURIComponent(expense_id)}`, {
+  const resp = await fetch(`/api/expenses?id=${encodeURIComponent(expense_id)}`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(fields)
@@ -93,12 +93,12 @@ export async function updateExpense(expense_id, fields = {}){
 
 export async function deleteExpenseSplitsByExpense(expense_id){
   // DELETE splits for an expense (preserve expense row)
-  const resp = await fetch(`/api/expenses/${encodeURIComponent(expense_id)}/splits`, { method: 'DELETE', headers: authHeaders() })
+  const resp = await fetch(`/api/expenses/splits?id=${encodeURIComponent(expense_id)}`, { method: 'DELETE', headers: authHeaders() })
   return handleJsonResponse(resp)
 }
 
 export async function deleteExpense(expense_id){
-  const resp = await fetch(`/api/expenses/${encodeURIComponent(expense_id)}`, { method: 'DELETE', headers: authHeaders() })
+  const resp = await fetch(`/api/expenses?id=${encodeURIComponent(expense_id)}`, { method: 'DELETE', headers: authHeaders() })
   return handleJsonResponse(resp)
 }
 
@@ -106,22 +106,22 @@ export async function insertExpenseSplits(splits = []){
   if(!splits || splits.length === 0) return []
   // expect splits to be an array of objects with expense_id, user_id, owed_to, amount, status
   const expenseId = splits[0].expense_id
-  const resp = await fetch(`/api/expenses/${encodeURIComponent(expenseId)}/splits`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ splits }) })
+  const resp = await fetch(`/api/expenses/splits?id=${encodeURIComponent(expenseId)}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ splits }) })
   return handleJsonResponse(resp)
 }
 
 export async function getActivityById(activity_id){
-  const resp = await fetch(`/api/activities/${encodeURIComponent(activity_id)}`)
+  const resp = await fetch(`/api/activities?id=${encodeURIComponent(activity_id)}`)
   return handleJsonResponse(resp)
 }
 
 export async function updateActivity(activity_id, fields = {}){
-  const resp = await fetch(`/api/activities/${encodeURIComponent(activity_id)}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(fields) })
+  const resp = await fetch(`/api/activities?id=${encodeURIComponent(activity_id)}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(fields) })
   return handleJsonResponse(resp)
 }
 
 export async function getActivityMembers(activity_id){
-  const resp = await fetch(`/api/activities/${encodeURIComponent(activity_id)}/members`)
+  const resp = await fetch(`/api/activities/members?id=${encodeURIComponent(activity_id)}`)
   return handleJsonResponse(resp)
 }
 
@@ -134,7 +134,7 @@ export async function getMembersForActivities(ids = []){
 
 // Dashboard totals for a user
 export async function getDashboardTotals(user_id){
-  const resp = await fetch(`/api/users/${encodeURIComponent(user_id)}/dashboard`)
+  const resp = await fetch(`/api/users/dashboard?id=${encodeURIComponent(user_id)}`)
   return handleJsonResponse(resp)
 }
 
@@ -150,7 +150,7 @@ export async function getPayments(user_id){
 }
 
 export async function getMyExpenseSplits(user_id){
-  const resp = await fetch(`/api/users/${encodeURIComponent(user_id)}/splits`)
+  const resp = await fetch(`/api/users/splits?id=${encodeURIComponent(user_id)}`)
   return handleJsonResponse(resp)
 }
 

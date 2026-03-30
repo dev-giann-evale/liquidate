@@ -3,7 +3,7 @@ const db = require('../db')
 async function getActivity({ params }){
   const id = params.id
   const { rows } = await db.query('select * from liquidate_activities where id = $1', [id])
-  if(rows.length === 0) return { status: 404, json: { error: 'not_found' } }
+  if(rows.length === 0) return { status: 404, json: { error: 'activities_not_found' } }
   return { status: 200, json: rows[0] }
 }
 
@@ -58,4 +58,12 @@ async function listActivityMembers({ params }){
   return { status: 200, json: rows }
 }
 
-module.exports = { getActivity, listActivities, updateActivity, getActivityExpenses, listActivityMembers }
+async function createActivity({ body }){
+  const { name, description, created_by } = body || {}
+  if(!name) return { status: 400, json: { error: 'missing name' } }
+  const sql = 'insert into liquidate_activities (name, description, created_by) values ($1,$2,$3) returning *'
+  const { rows } = await db.query(sql, [name, description || null, created_by || null])
+  return { status: 200, json: rows[0] }
+}
+
+module.exports = { getActivity, listActivities, updateActivity, getActivityExpenses, listActivityMembers, createActivity }
